@@ -1,10 +1,9 @@
 const WebSocket = require("ws");
 
 const PORT = process.env.PORT || 8080;
-const wss = new WebSocket.Server({ port: PORT });
+const wss  = new WebSocket.Server({ port: PORT });
 
-// clients: ws -> { username, room }
-const clients = new Map();
+const clients = new Map(); // ws -> { username, room }
 
 function broadcastToRoom(room, data, excludeWs) {
     const msg = JSON.stringify(data);
@@ -24,7 +23,7 @@ function broadcastToAll(room, data) {
 }
 
 wss.on("connection", (ws) => {
-    console.log("[+] Client connected. Total:", wss.clients.size);
+    console.log("[+] connected. total:", wss.clients.size);
 
     ws.on("message", (raw) => {
         let data;
@@ -32,8 +31,7 @@ wss.on("connection", (ws) => {
 
         if (data.type === "join") {
             const username = String(data.username || "Unknown").slice(0, 32);
-            // room: "global" atau JobId
-            const room = String(data.room || "global").slice(0, 64);
+            const room     = String(data.room || "global").slice(0, 64);
             clients.set(ws, { username, room });
 
             broadcastToRoom(room, { type: "system", msg: username + " bergabung." }, ws);
@@ -43,7 +41,20 @@ wss.on("connection", (ws) => {
                 .map(c => c.username);
             ws.send(JSON.stringify({ type: "online", users: online }));
 
-            console.log("[join]", username, "->", room);
+            console.log("[join]", username, "->", room.slice(0, 12));
+
+        } else if (data.type === "leave") {
+            // client mau pindah room, broadcast keluar ke room lama
+            const client = clients.get(ws);
+            if (client) {
+                broadcastToRoom(client.room, {
+                    type: "system",
+                    msg: client.username + " keluar."
+                }, ws);
+                console.log("[leave]", client.username, "from", client.room.slice(0, 12));
+            }
+            // hapus dari map, koneksi ws masih hidup tapi akan join ulang
+            clients.delete(ws);
 
         } else if (data.type === "chat") {
             const client = clients.get(ws);
