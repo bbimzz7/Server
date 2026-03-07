@@ -3,14 +3,23 @@ const WebSocket = require("ws");
 const PORT = process.env.PORT || 8080;
 const wss = new WebSocket.Server({ port: PORT });
 
+// clients: ws -> { username, room }
 const clients = new Map();
 
-function broadcast(data, excludeWs) {
+function broadcastToRoom(room, data, excludeWs) {
     const msg = JSON.stringify(data);
-    for (const [ws] of clients) {
-        if (ws !== excludeWs && ws.readyState === WebSocket.OPEN) {
-            ws.send(msg);
-        }
+    for (const [ws, info] of clients) {
+        if (ws === excludeWs) continue;
+        if (info.room !== room) continue;
+        if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+    }
+}
+
+function broadcastToAll(room, data) {
+    const msg = JSON.stringify(data);
+    for (const [ws, info] of clients) {
+        if (info.room !== room) continue;
+        if (ws.readyState === WebSocket.OPEN) ws.send(msg);
     }
 }
 
@@ -23,35 +32,44 @@ wss.on("connection", (ws) => {
 
         if (data.type === "join") {
             const username = String(data.username || "Unknown").slice(0, 32);
-            clients.set(ws, { username });
-            broadcast({ type: "system", msg: username + " bergabung ke chat." }, ws);
-            const online = [...clients.values()].map(c => c.username);
+            // room: "global" atau JobId
+            const room = String(data.room || "global").slice(0, 64);
+            clients.set(ws, { username, room });
+
+            broadcastToRoom(room, { type: "system", msg: username + " bergabung." }, ws);
+
+            const online = [...clients.values()]
+                .filter(c => c.room === room)
+                .map(c => c.username);
             ws.send(JSON.stringify({ type: "online", users: online }));
-            console.log("[join]", username);
+
+            console.log("[join]", username, "->", room);
 
         } else if (data.type === "chat") {
             const client = clients.get(ws);
             if (!client) return;
             const msg = String(data.msg || "").slice(0, 200);
             if (!msg.trim()) return;
-            const payload = JSON.stringify({
-                type: "chat",
+
+            broadcastToAll(client.room, {
+                type:     "chat",
                 username: client.username,
-                msg: msg,
-                time: new Date().toISOString(),
+                msg:      msg,
+                time:     new Date().toISOString(),
             });
-            for (const [w] of clients) {
-                if (w.readyState === WebSocket.OPEN) w.send(payload);
-            }
-            console.log("[chat]", client.username, ":", msg);
+
+            console.log("[" + client.room.slice(0, 8) + "]", client.username, ":", msg);
         }
     });
 
     ws.on("close", () => {
         const client = clients.get(ws);
         if (client) {
-            broadcast({ type: "system", msg: client.username + " keluar." }, ws);
-            console.log("[-]", client.username, "disconnected");
+            broadcastToRoom(client.room, {
+                type: "system",
+                msg: client.username + " keluar."
+            }, ws);
+            console.log("[-]", client.username);
         }
         clients.delete(ws);
     });
@@ -63,4 +81,3 @@ wss.on("connection", (ws) => {
 });
 
 console.log("VH Chat Server running on port", PORT);
-
