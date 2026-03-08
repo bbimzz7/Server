@@ -1,12 +1,78 @@
 -- VH CHAT - VertictHub (standalone module)
--- Load via: loadstring(readfile("vh_chat.lua"))(WindUI)
+-- Load via: loadstring(game:HttpGet(URL))(WindUI)
+-- WindUI optional — kalau nil, notif pakai toast ScreenGui bawaan
 
-local WindUI      = ...  -- dikirim dari main script
+local WindUI      = ...  -- bisa nil kalau script lain ga punya WindUI
 local LocalPlayer = game:GetService("Players").LocalPlayer
 
 local VH_WS_URL   = "wss://vh-chat-server-production.up.railway.app"
 local currentRoom = "global"
 local VH_ICON     = "rbxassetid://83579786748904"
+
+-- ── Fungsi notif universal ────────────────────
+-- Pakai WindUI kalau ada, fallback ke toast ScreenGui
+
+local ToastGui = Instance.new("ScreenGui")
+ToastGui.Name          = "VHChatToast"
+ToastGui.ResetOnSpawn  = false
+ToastGui.DisplayOrder  = 999
+ToastGui.Parent        = LocalPlayer.PlayerGui
+
+local function vhNotify(title, content, duration)
+    duration = duration or 3
+
+    if WindUI then
+        pcall(function()
+            WindUI:Notify({ Title = title, Content = content, Duration = duration })
+        end)
+        return
+    end
+
+    -- Fallback: toast ScreenGui
+    local toast = Instance.new("Frame", ToastGui)
+    toast.Size             = UDim2.new(0, 260, 0, 0)
+    toast.AutomaticSize    = Enum.AutomaticSize.Y
+    toast.Position         = UDim2.new(1, -276, 1, -80)
+    toast.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
+    toast.BorderSizePixel  = 0
+    Instance.new("UICorner", toast).CornerRadius = UDim.new(0, 8)
+    local ts = Instance.new("UIStroke", toast)
+    ts.Color = Color3.fromRGB(70, 70, 120) ts.Thickness = 1
+
+    local tp = Instance.new("UIPadding", toast)
+    tp.PaddingLeft = UDim.new(0,10) tp.PaddingRight  = UDim.new(0,10)
+    tp.PaddingTop  = UDim.new(0,8)  tp.PaddingBottom = UDim.new(0,8)
+
+    local tl = Instance.new("UIListLayout", toast)
+    tl.Padding = UDim.new(0, 3) tl.SortOrder = Enum.SortOrder.LayoutOrder
+
+    local titleL = Instance.new("TextLabel", toast)
+    titleL.Size               = UDim2.new(1, 0, 0, 14)
+    titleL.BackgroundTransparency = 1
+    titleL.Text               = title
+    titleL.TextColor3         = Color3.fromRGB(200, 200, 255)
+    titleL.TextSize           = 12
+    titleL.Font               = Enum.Font.GothamBold
+    titleL.TextXAlignment     = Enum.TextXAlignment.Left
+    titleL.LayoutOrder        = 0
+
+    local msgL = Instance.new("TextLabel", toast)
+    msgL.Size               = UDim2.new(1, 0, 0, 0)
+    msgL.AutomaticSize      = Enum.AutomaticSize.Y
+    msgL.BackgroundTransparency = 1
+    msgL.Text               = content
+    msgL.TextColor3         = Color3.fromRGB(190, 190, 210)
+    msgL.TextSize           = 11
+    msgL.Font               = Enum.Font.Gotham
+    msgL.TextXAlignment     = Enum.TextXAlignment.Left
+    msgL.TextWrapped        = true
+    msgL.LayoutOrder        = 1
+
+    -- auto destroy setelah duration
+    task.delay(duration, function()
+        if toast and toast.Parent then toast:Destroy() end
+    end)
+end
 
 -- Owner user IDs
 local OWNER_IDS = { [10278652817] = true, [5392733334] = true }
@@ -447,11 +513,7 @@ local function connectWS()
             local isSelf = data.username == LocalPlayer.Name
             addMsg(data.username, data.msg, isSelf, false)
             if minimized and not isSelf then
-                WindUI:Notify({
-                    Title   = "💬 " .. data.username,
-                    Content = data.msg,
-                    Duration = 4,
-                })
+                vhNotify("💬 " .. data.username, data.msg, 4)
             end
         elseif data.type == "system" then
             sysMsg(data.msg)
