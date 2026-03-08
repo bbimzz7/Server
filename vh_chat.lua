@@ -621,3 +621,6 @@ end
 SendBtn.MouseButton1Click:Connect(function() sendMsg(ChatInput.Text) end)
 ChatInput.FocusLost:Connect(function(enter) if enter then sendMsg(ChatInput.Text) end end)
 
+-- connect langsung saat script jalan (room default: global)
+task.spawn(connectWS)
+
